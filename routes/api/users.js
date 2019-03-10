@@ -15,37 +15,13 @@ router.post('/register', (req, res) => {
     return res.status(400).json(errors);
   }
 
-  User.findOne({email: req.body.email})
-    .then(user => {
-      if (user) {
-        errors.email = "Email already exists";
-        return res.status(400).json(errors);
-      } else {
-        const newUser = new User({
-          name: req.body.name,
-          email: req.body.email,
-          password: req.body.password
-        });
-      }
-    });
-});
-
-// concept of controllers & routes blended into one,
-// given request & route, we'll respond in a certain way.
-
-router.post('/register', (req, res) => {
-  const {errors, isValid} = validateRegisterInput(req.body);
-  if (!isValid) {
-    return res.status(400).json(errors);
-  }
-  // Check to make sure nobody has already registered with a duplicate email
   User.findOne({ email: req.body.email })
     .then(user => {
       if (user) {
-        // Throw a 400 error if the email address already exists
+
         return res.status(400).json({email: "A user has already registered with this address"});
       } else {
-        // Otherwise create a new user
+
         const newUser = new User({
           handle: req.body.handle,
           email: req.body.email,
@@ -56,8 +32,18 @@ router.post('/register', (req, res) => {
           bcrypt.hash(newUser.password, salt, (err, hash) => {
             if (err) throw err;
             newUser.password = hash;
-            newUser.save()
-              .then(user => res.json(user))
+            newUser
+              .save()
+              .then(user => {
+                const payload = { id: user.id, name: user.name };
+  
+                jwt.sign(payload, keys.secretOrKey, { expiresIn: 3600 }, (err, token) => {
+                  res.json({
+                    success: true,
+                    token: "Bearer " + token
+                  });
+                });
+              })
               .catch(err => console.log(err));
           });
         });
@@ -66,9 +52,10 @@ router.post('/register', (req, res) => {
 });
 
 router.post('/login', (req, res) => {
+  const {errors, isValid} = validateLoginInput(req.body);
+  
   const email = req.body.email;
   const password = req.body.password;
-  const {errors, isValid} = validateLoginInput(req.body);
 
   if (!isValid) {
     return res.status(400).json(errors);
@@ -79,6 +66,7 @@ router.post('/login', (req, res) => {
       if (!user) {
         return res.status(404).json({email: 'This user does not exist'});
       }
+
       bcrypt.compare(password, user.password)
         .then(isMatch => {
           if (isMatch) {
@@ -87,7 +75,6 @@ router.post('/login', (req, res) => {
             jwt.sign(
               payload,
               keys.secretOrKey,
-              // Tell the key to expire in one hour
               {expiresIn: 3600},
               (err, token) => {
                 res.json({
